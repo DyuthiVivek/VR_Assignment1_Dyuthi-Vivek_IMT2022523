@@ -2,18 +2,17 @@ import cv2
 import numpy as np
 import matplotlib.pyplot as plt
 
-def show_image(title, img):
-    """Displays an image using Matplotlib (convert BGR to RGB if needed)."""
+def save_image(title, img):
     if len(img.shape) == 3:  # Color image
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     plt.figure(figsize=(10, 5))
     plt.imshow(img)
     plt.title(title)
     plt.axis('off')  # Hide axes
-    plt.show()
+    plt.savefig(f'images/{title}.jpg')
 
-def find_keypoints_and_matches(img1, img2):
-    """Find SIFT keypoints and matches between two images."""
+def find_keypoints_and_matches(img1, img2, title):
+    # Find SIFT keypoints and matches between two images
     sift = cv2.SIFT_create()
     
     # Detect keypoints and descriptors
@@ -29,12 +28,12 @@ def find_keypoints_and_matches(img1, img2):
     
     # Draw matches
     match_img = cv2.drawMatches(img1, kp1, img2, kp2, matches[:50], None, flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS)
-    show_image("Keypoint Matches", match_img)
+    save_image(f'keypoint-matches-{title}-and-reference', match_img)
 
     return kp1, kp2, matches
 
 def compute_homography(kp1, kp2, matches):
-    """Compute the homography matrix using RANSAC."""
+    # Compute the homography matrix using RANSAC
     src_pts = np.float32([kp1[m.queryIdx].pt for m in matches]).reshape(-1, 1, 2)
     dst_pts = np.float32([kp2[m.trainIdx].pt for m in matches]).reshape(-1, 1, 2)
     
@@ -43,7 +42,7 @@ def compute_homography(kp1, kp2, matches):
     return H
 
 def warp_images(img1, img2, H):
-    """Warp img1 into the reference frame of img2 using homography."""
+    # Warp img1 into the reference frame of img2 using homography and back warping
     h1, w1 = img1.shape[:2]
     h2, w2 = img2.shape[:2]
     
@@ -51,7 +50,7 @@ def warp_images(img1, img2, H):
     corners_img1 = np.float32([[0, 0], [w1, 0], [0, h1], [w1, h1]]).reshape(-1, 1, 2)
     transformed_corners = cv2.perspectiveTransform(corners_img1, H)
     
-    # Get dimensions for the final panorama
+    # dimensions for the final panorama
     all_corners = np.concatenate((transformed_corners, np.float32([[0, 0], [w2, 0], [0, h2], [w2, h2]]).reshape(-1, 1, 2)), axis=0)
     x_min, y_min = np.int32(all_corners.min(axis=0).ravel())
     x_max, y_max = np.int32(all_corners.max(axis=0).ravel())
@@ -65,31 +64,24 @@ def warp_images(img1, img2, H):
     # Also shift img2 to fit into the panorama
     translated_img2 = np.zeros((y_max - y_min, x_max - x_min, 3), dtype=np.uint8)
     translated_img2[-y_min:h2 - y_min, -x_min:w2 - x_min] = img2
-    
-    # show_image("Warped Image 1", warped_img1)
-    # show_image("Translated Image 2", translated_img2)
 
     return warped_img1, translated_img2
 
 def blend_images(img1, img2):
-    """Blend two overlapping images using weighted blending."""
+    # Blend two overlapping images using weighted blending
     mask1 = (img1 > 0).astype(np.float32)
     mask2 = (img2 > 0).astype(np.float32)
 
     blended = (img1 * mask1 + img2 * mask2) / (mask1 + mask2 + 1e-6)  # Prevent division by zero
     blended = np.clip(blended, 0, 255).astype(np.uint8)
-
-    show_image("Blended Image", blended)
-
     return blended
 
 
-def stitch_images(img1, img2):
-    """Find keypoints, compute homography, warp, and blend images."""
-    print("Stitching image into the reference frame...")
+def stitch_images(img1, img2, title):
+    print(f"Stitching image {title} into the reference frame")
     
     # Find keypoints and matches
-    kp1, kp2, matches = find_keypoints_and_matches(img1, img2)
+    kp1, kp2, matches = find_keypoints_and_matches(img1, img2, title)
     
     # Compute Homography
     H = compute_homography(kp1, kp2, matches)
@@ -102,23 +94,22 @@ def stitch_images(img1, img2):
 
     return panorama
 
-def main(image_files):
+def create_panorama(image_files):
     # Load images
     images = [cv2.imread(img) for img in image_files]
 
     # Stitch images progressively
     panorama = images[1]  # Reference image (img2)
     
-    for i, img in enumerate([images[0], images[2], images[3]]):
-        print(f"Stitching image {i+1} into the reference frame...")
-        panorama = stitch_images(img, panorama)
+    for i, img in enumerate([images[0]] + images[2:]):
+        panorama = stitch_images(img, panorama, title=str(i+1) if i == 0 else str(i+2))
 
-    # Show final panorama
-    show_image("Final Panorama", panorama)
-
-    # Save the result
-    cv2.imwrite("stitched_panorama.jpg", panorama)
+    save_image("final-panorama", panorama)
 
 if __name__ == "__main__":
+    # 4, 6, 7, 8
     image_files = ["4.jpeg", "6.jpeg", "7.jpeg", "8.jpeg"]
-    main(image_files)
+    # image_files = ["2-1.jpeg", "2-2.jpeg", "2-3.jpeg", "2-4.jpeg"]
+    print('Using image 2 as the reference frame')
+    # image_files = ["3-5.jpeg", "3-4.jpeg", "3-3.jpeg", "3-2.jpeg"]
+    create_panorama(image_files)
