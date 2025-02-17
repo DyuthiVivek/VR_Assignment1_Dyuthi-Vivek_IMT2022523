@@ -2,36 +2,95 @@ import cv2
 import numpy as np
 import matplotlib.pyplot as plt
 
-image = cv2.imread('coins-2-cropped-2.jpg')
-gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+def preprocess_image(image):
+    # image preprocessing
+    image_blur = cv2.medianBlur(image,25)
+    image_blur_gray = cv2.cvtColor(image_blur, cv2.COLOR_BGR2GRAY)
+    image_res, image_thresh = cv2.threshold(image_blur_gray,0,255,cv2.THRESH_BINARY_INV+cv2.THRESH_OTSU)
+    return image_blur_gray, image_res, image_thresh
 
-plt.axis('off')  # To hide axis
+def edge_and_coin_detection(image_blur_gray):
+    # canny edge detection
+    canny = cv2.Canny(image_blur_gray, 1, 125)
+    plt.imshow(canny, cmap='gray')
+    plt.axis('off')
+    plt.title("Canny Edge Detection")
+    plt.savefig('images/coin-detection-canny.jpg')
 
-blur = cv2.GaussianBlur(gray, (5,5), 0)
-plt.imshow(blur, cmap='gray')
-plt.show()
+    # detecing the coins using contours
+    dilated = cv2.dilate(canny, (1,1), iterations=4)
 
-canny = cv2.Canny(blur, 1, 125)
-plt.imshow(canny, cmap='gray')
-plt.show()
+    # Find contours
+    contours, _ = cv2.findContours(dilated.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
 
-dilated = cv2.dilate(canny, (1,1), iterations = 4)
-plt.imshow(dilated, cmap='gray')
-plt.show()
+    # draw detected contours
+    contour_image = cv2.cvtColor(image.copy(), cv2.COLOR_BGR2RGB)
+    cv2.drawContours(contour_image, contours, -1, (0,255,0), 2)
 
-# Find contours in the edge-detected image
-contours, _ = cv2.findContours(canny.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
-# Create a copy of the original image to draw contours on
-contour_image = image.copy()
-
-
-(cnt, heirarchy) = cv2.findContours(dilated.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
-rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-cv2.drawContours(rgb, cnt, -1, (0,255,0), 2)
-
-plt.imshow(rgb)
+    # Display detected contours
+    plt.figure(figsize=(10,5))
+    plt.axis('off')
+    plt.imshow(contour_image)
+    plt.title("Detected Coins")
+    plt.savefig('images/coin-detection-contours.jpg')
 
 
-print('Coins in the image: ', len(cnt))
-plt.show()
+def region_based_segmentation(image_thresh):
+    # noise removal
+    kernel = np.ones((3,3),np.uint8)
+    opening = cv2.morphologyEx(image_thresh,cv2.MORPH_OPEN,kernel, iterations = 5)
+    # sure background area
+    sure_bg = cv2.dilate(opening,kernel,iterations=3)
+    # Finding sure foreground area
+    dist_transform = cv2.distanceTransform(opening,cv2.DIST_L2,5)
+    ret, sure_fg = cv2.threshold(dist_transform,0.2*dist_transform.max(),255,0)
+    # Finding unknown region
+    sure_fg = np.uint8(sure_fg)
+    unknown = cv2.subtract(sure_bg,sure_fg)
+
+    # Marker labelling
+    _, markers = cv2.connectedComponents(sure_fg)
+    # Add one to all labels so that sure background is not 0
+    markers += 1
+    # Now, mark the region of unknown with zero
+    markers[unknown ==255] = 0
+
+    # Apply watershed
+    markers = cv2.watershed(image,markers)
+    image[markers == -1] = [255,0,0]
+
+    plt.title("Segmented Coins")
+    plt.imshow(markers,cmap='gray')
+    plt.axis('off')
+    plt.savefig('images/coin-detection-region-based-segmented.jpg')
+    
+    return markers
+
+
+def count_coins(markers):
+    labels = np.unique(markers)
+
+
+    coins = []
+    for label in labels[2:]:  
+    # Create a binary image in which only the area of the label is in the foreground 
+    # and the rest of the image is in the background   
+        target = np.where(markers == label, 255, 0).astype(np.uint8)
+        
+    # Perform contour extraction on the created binary image
+        contours, hierarchy = cv2.findContours(
+            target, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+        )
+        coins.append(contours[0])
+
+    number_of_objects_in_image= len(coins)
+
+    print ("The number of objects in this image: ", str(number_of_objects_in_image))
+
+
+if __name__ == "__main__":
+    image = cv2.imread('coins.jpg')
+    image_blur_gray, image_res, image_thresh = preprocess_image(image)
+    edge_and_coin_detection(image_blur_gray)
+    markers = region_based_segmentation(image_thresh)
+    count_coins(markers)

@@ -107,9 +107,6 @@ def create_panorama(image_files):
     save_image("final-panorama", panorama)
 
 if __name__ == "__main__":
-    # 4, 6, 7, 8
-    image_files = ["4.jpeg", "6.jpeg", "7.jpeg", "8.jpeg"]
-    # image_files = ["2-1.jpeg", "2-2.jpeg", "2-3.jpeg", "2-4.jpeg"]
+    image_files = ["2-1.jpeg", "2-2.jpeg", "2-3.jpeg", "2-4.jpeg"]
     print('Using image 2 as the reference frame')
-    # image_files = ["3-5.jpeg", "3-4.jpeg", "3-3.jpeg", "3-2.jpeg"]
     create_panorama(image_files)
