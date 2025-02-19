@@ -34,37 +34,40 @@ def edge_and_coin_detection(image_blur_gray):
     plt.title("Detected Coins")
     plt.savefig('images/coin-detection-contours.jpg')
 
+def region_based_segmentation(binary_image):
+    # Noise removal using morphological operations
+    kernel_matrix = np.ones((3,3), np.uint8)
+    cleaned_image = cv2.morphologyEx(binary_image, cv2.MORPH_OPEN, kernel_matrix, iterations=5)
 
-def region_based_segmentation(image_thresh):
-    # noise removal
-    kernel = np.ones((3,3),np.uint8)
-    opening = cv2.morphologyEx(image_thresh,cv2.MORPH_OPEN,kernel, iterations = 5)
-    # sure background area
-    sure_bg = cv2.dilate(opening,kernel,iterations=3)
-    # Finding sure foreground area
-    dist_transform = cv2.distanceTransform(opening,cv2.DIST_L2,5)
-    ret, sure_fg = cv2.threshold(dist_transform,0.2*dist_transform.max(),255,0)
-    # Finding unknown region
-    sure_fg = np.uint8(sure_fg)
-    unknown = cv2.subtract(sure_bg,sure_fg)
+    # Identifying background
+    background_region = cv2.dilate(cleaned_image, kernel_matrix, iterations=3)
 
-    # Marker labelling
-    _, markers = cv2.connectedComponents(sure_fg)
-    # Add one to all labels so that sure background is not 0
-    markers += 1
-    # Now, mark the region of unknown with zero
-    markers[unknown ==255] = 0
+    # Identifying foreground - distance transform
+    distance_transformed = cv2.distanceTransform(cleaned_image, cv2.DIST_L2, 5)
+    _, foreground_region = cv2.threshold(distance_transformed, 0.2 * distance_transformed.max(), 255, 0)  # Adjusted threshold
 
-    # Apply watershed
-    markers = cv2.watershed(image,markers)
-    image[markers == -1] = [255,0,0]
+    # Identifying unknown region
+    foreground_region = np.uint8(foreground_region)
+    uncertain_region = cv2.subtract(background_region, foreground_region)
+
+    # Connected component labeling
+    _, labeled_markers = cv2.connectedComponents(foreground_region)
+    labeled_markers += 1  # Ensure background is not zero
+
+    # Marking unknown regions as zero
+    labeled_markers[uncertain_region == 255] = 0
+
+    # Applying watershed algorithm for segmentation
+    labeled_markers = cv2.watershed(image, labeled_markers)
+    image[labeled_markers == -1] = [255, 0, 0]
 
     plt.title("Segmented Coins")
-    plt.imshow(markers,cmap='gray')
+    plt.imshow(labeled_markers, cmap='gray')
     plt.axis('off')
     plt.savefig('images/coin-detection-region-based-segmented.jpg')
-    
-    return markers
+
+    return labeled_markers
+
 
 def segment_individual_coins_and_count(markers, image):
     labels = np.unique(markers)
@@ -101,7 +104,7 @@ def segment_individual_coins_and_count(markers, image):
 
 
 if __name__ == "__main__":
-    image = cv2.imread('coins.jpg')
+    image = cv2.imread('images/input_coins.jpg')
     image_blur_gray, image_res, image_thresh = preprocess_image(image)
     edge_and_coin_detection(image_blur_gray)
     markers = region_based_segmentation(image_thresh)

@@ -12,12 +12,13 @@ def save_image(title, img):
     plt.savefig(f'images/{title}.jpg')
 
 def find_keypoints_and_matches(img1, img2, title):
+    # SIFT keypoint detection
     sift = cv2.SIFT_create()
     
     kp1, des1 = sift.detectAndCompute(img1, None)
     kp2, des2 = sift.detectAndCompute(img2, None)
 
-    # Use FLANN matcher for better accuracy
+    # FLANN matcher 
     FLANN_INDEX_KDTREE = 1
     index_params = dict(algorithm=FLANN_INDEX_KDTREE, trees=5)
     search_params = dict(checks=50)
@@ -25,7 +26,7 @@ def find_keypoints_and_matches(img1, img2, title):
     
     matches = flann.knnMatch(des1, des2, k=2)
 
-    # Apply Lowe's Ratio Test for better match filtering
+    # Lowe's ratio test
     good_matches = []
     for m, n in matches:
         if m.distance < 0.75 * n.distance:
@@ -55,18 +56,17 @@ def warp_images(img1, img2, H):
     corners_img1 = np.float32([[0, 0], [w1, 0], [0, h1], [w1, h1]]).reshape(-1, 1, 2)
     transformed_corners = cv2.perspectiveTransform(corners_img1, H)
     
-    # dimensions for the final panorama
     all_corners = np.concatenate((transformed_corners, np.float32([[0, 0], [w2, 0], [0, h2], [w2, h2]]).reshape(-1, 1, 2)), axis=0)
     x_min, y_min = np.int32(all_corners.min(axis=0).ravel())
     x_max, y_max = np.int32(all_corners.max(axis=0).ravel())
 
-    translation_matrix = np.array([[1, 0, -x_min], [0, 1, -y_min], [0, 0, 1]])  # Shift to avoid negative coordinates
-    H_translated = translation_matrix @ H  # Adjust the homography
+    translation_matrix = np.array([[1, 0, -x_min], [0, 1, -y_min], [0, 0, 1]])
+    H_translated = translation_matrix @ H  # ddjust the homography
     
     # Warp img1 into the new panorama space
     warped_img1 = cv2.warpPerspective(img1, H_translated, (x_max - x_min, y_max - y_min), cv2.INTER_CUBIC)
     
-    # Also shift img2 to fit into the panorama
+    # shift img2 to fit into the panorama
     translated_img2 = np.zeros((y_max - y_min, x_max - x_min, 3), dtype=np.uint8)
     translated_img2[-y_min:h2 - y_min, -x_min:w2 - x_min] = img2
 
@@ -94,7 +94,7 @@ def stitch_images(img1, img2, title):
     # Warp Image 1 into the reference frame of Image 2
     warped_img1, translated_img2 = warp_images(img1, img2, H)
     
-    # Blend the images
+    # Blend
     panorama = blend_images(warped_img1, translated_img2)
 
     return panorama
@@ -114,10 +114,9 @@ def create_panorama(image_files):
     new_dimensions = (int(width * scale_factor), int(height * scale_factor))
     panorama = cv2.resize(panorama, new_dimensions, interpolation=cv2.INTER_AREA)
 
-
     save_image("final-panorama", panorama)
 
 if __name__ == "__main__":
-    image_files = ["1.jpeg", "2.jpeg", "3.jpeg", "4.jpeg"]
+    image_files = ["images/1.jpeg", "images/2.jpeg", "images/3.jpeg", "images/4.jpeg"]
     print('Using image 2 as the reference frame')
     create_panorama(image_files)
