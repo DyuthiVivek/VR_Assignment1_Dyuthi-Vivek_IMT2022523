@@ -150,7 +150,7 @@ After processing all images with the above steps, the final stitched panorama wa
 
 
 <p align="center">
-    <img src="images/final-panorama.jpg" width="400">
+    <img src="images/final-panorama.jpg" width="600">
 </p>
 
 
