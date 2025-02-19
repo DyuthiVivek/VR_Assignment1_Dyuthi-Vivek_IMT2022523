@@ -2,8 +2,11 @@
 
 ## Coin detection
 
-![coins](coins.jpg)  
-Input image file: `coins.jpg`
+<p align="center">
+    <img src="coins.jpg" width="300">
+</p>
+
+Input image: `coins.jpg`
 
 ---
 
@@ -17,17 +20,25 @@ Input image file: `coins.jpg`
 ---
 
 ### **2. Edge detection and contour detection**
-- **Canny Edge Detection (`cv2.Canny`)** - Detected edges by calculating intensity changes in the image. Canny worked well after the two thresholds were tweaked to achieve a more accurate edge detection.
+- **Canny Edge Detection (`cv2.Canny`)** - Detected edges by calculating intensity changes in the image. Canny worked better after the two thresholds were tweaked to achieve a more accurate edge detection.
+Although if any coins are close together, the edges may not be detected accuractely.
 
-![canny](images/coin-detection-canny.jpg)  
-file: `images/coin-detection-canny.jpg`
+<p align="center">
+    <img src="images/coin-detection-canny.jpg" width="300">
+</p>
+
+image: `images/coin-detection-canny.jpg`
 
 - **Dilation (`cv2.dilate`)** - Strengthened the edges to ensure complete contours. Increasing the number of iterations improved contour detection by reinforcing the edges.
 
 - **Contour detection (`cv2.findContours`)** - Identified the boundaries of coins based on detected edges. A green boundary was drawn around each coin.
 
-![contour](images/coin-detection-contours.jpg)  
-file: `images/coin-detection-contours.jpg`
+
+<p align="center">
+    <img src="images/coin-detection-contours.jpg" width="300">
+</p>
+
+image: `images/coin-detection-contours.jpg`
 
 ---
 
@@ -42,8 +53,13 @@ file: `images/coin-detection-contours.jpg`
     - `2, 3, 4,...` → Different segmented objects  
     - `-1` → Object boundaries (watershed lines), which help separate overlapping coins.
 
-![segmented](images/coin-detection-region-based-segmented.jpg)  
-file: `images/coin-detection-region-based-segmented.jpg`
+
+<p align="center">
+    <img src="images/coin-detection-region-based-segmented.jpg" width="300">
+</p>
+
+
+image: `images/coin-detection-region-based-segmented.jpg`
 
 ---
 
@@ -54,7 +70,7 @@ file: `images/coin-detection-region-based-segmented.jpg`
   A bounding box was applied using **`cv2.boundingRect`** to isolate each coin clearly.
 
 #### **Code Output:**
-The number of objects in this image: **6**  
+The number of objects in this image: **10**  
 
 #### **Segmented Coin Images:**
 <p align="center">
@@ -64,10 +80,80 @@ The number of objects in this image: **6**
     <img src="images/coin_4.jpg" width="100">
     <img src="images/coin_5.jpg" width="100">
     <img src="images/coin_6.jpg" width="100">
+    <img src="images/coin_7.jpg" width="100">
+    <img src="images/coin_8.jpg" width="100">
+    <img src="images/coin_9.jpg" width="100">
+    <img src="images/coin_10.jpg" width="100">
 </p>
+
+
+images: `images/coin_1.jpg` to `images/coin_10.jpg`
+
 
 ---
 
 #### **Observations:**
 - The final count of coins was accurate for well-separated coins.
 - In cases where coins were highly overlapping, the segmentation sometimes grouped them as a single object, highlighting a limitation of the watershed approach.
+
+---
+
+## Image stitching
+
+The following images were stitched to create a panorama:
+
+<p align="center">
+    <img src="1.jpeg" width="400">
+    <img src="2.jpeg" width="400">
+    <img src="3.jpeg" width="400">
+    <img src="4.jpeg" width="400">
+
+</p>
+
+
+### 1. Keypoint matching
+
+- Detected keypoints and descriptors using SIFT (Scale-Invariant Feature Transform) - `cv2.SIFT_create()`
+- Initially, BFMatcher (Brute Force Matcher) was used to find keypoint correspondences, but it was found to be slower and less accurate for large feature sets. Instead, FLANN (Fast Library for Approximate Nearest Neighbors) - `cv2.FlannBasedMatcher`, was used. It provided better speed and accuracy.
+- Lowe’s Ratio Test was applied to filter good matches and remove incorrect correspondences.
+
+<p align="center">
+    <img src="images/keypoint-matches-1-and-reference.jpg" width="500">
+</p>
+
+
+<centre> Keypoint matches between image 1 and image 2</centre>
+
+image: `images/keypoint-matches-1-and-reference.jpg`
+
+### 2. Compute homography
+
+- A homographix traansformation was made to transform each image into the same plane.
+- RANSAC (Random Sample Consensus) was used to compute the homography matrix from the matched keypoints - `cv2.findHomography()`. Without RANSAC, alignment accuracy was poorer.
+
+### 3. Warping
+
+- The corners of the image we transformed first. Then back-warping was used to prevent holes in the created image.
+- Perspective transformation was applied using the computed homography matrix H - `cv2.warpPerspective()`. Using the `cv2.INTER_CUBIC` flag (bicubic interpolation) instead of `cv2.INTER_LINEAR` improved the smoothness of edges and alignment of features after warping. It considers a 4×4 neighborhood of pixels to estimate new pixel values.
+- The image was translated to ensure no negative pixel values.
+- Image 2 was used as a reference image. The other images were warped one by one into the reference image.
+- Some black regions (empty areas) appeared due to perspective transformation.
+
+### 4. Blending images
+
+- Weighted blending was used to remove visible seams between images.
+- Binary masks were created for both images to identify overlapping regions. A weighted average  was computed for overlapping regions.
+- The images were blended using the computed weights to remove seams.
+
+
+After processing all images with the above steps, the final stitched panorama was generated.
+
+
+<p align="center">
+    <img src="images/final-panorama.jpg" width="400">
+</p>
+
+
+<centre> Final stitched panorama</centre>
+
+image: `images/final-panorama.jpg`
