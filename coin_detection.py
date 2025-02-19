@@ -25,7 +25,7 @@ def edge_and_coin_detection(image_blur_gray):
 
     # draw detected contours
     contour_image = cv2.cvtColor(image.copy(), cv2.COLOR_BGR2RGB)
-    cv2.drawContours(contour_image, contours, -1, (0,255,0), 2)
+    cv2.drawContours(contour_image, contours, -1, (0,255,0), 6)
 
     # Display detected contours
     plt.figure(figsize=(10,5))
@@ -66,26 +66,38 @@ def region_based_segmentation(image_thresh):
     
     return markers
 
-
-def count_coins(markers):
+def segment_individual_coins_and_count(markers, image):
     labels = np.unique(markers)
 
-
     coins = []
-    for label in labels[2:]:  
-    # Create a binary image in which only the area of the label is in the foreground 
-    # and the rest of the image is in the background   
+    for label in labels[2:]:
+        # Create a binary image - only the area of the label is in the foreground
         target = np.where(markers == label, 255, 0).astype(np.uint8)
         
-    # Perform contour extraction on the created binary image
-        contours, hierarchy = cv2.findContours(
+        # Perform contour extraction on the created binary image
+        contours, _ = cv2.findContours(
             target, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
         )
-        coins.append(contours[0])
+        
+        # For each coin (contour), extract and save the segmented coin
+        for i, contour in enumerate(contours):
+            # mask for the current coin
+            mask = np.zeros_like(target)
+            cv2.drawContours(mask, [contour], -1, 255, thickness=cv2.FILLED)
+            
+            # Extract the coin from the original
+            coin = cv2.bitwise_and(image, image, mask=mask)
+            
+            # bounding box around the coin
+            x, y, w, h = cv2.boundingRect(contour)
+            coin_cropped = coin[y:y+h, x:x+w]
+            
+            coin_filename = f'coin_{label-1}.jpg'
+            cv2.imwrite(f'images/{coin_filename}', coin_cropped)
+            
+            coins.append(coin_cropped)
 
-    number_of_objects_in_image= len(coins)
-
-    print ("The number of objects in this image: ", str(number_of_objects_in_image))
+    print("The number of objects in this image: ", len(coins))
 
 
 if __name__ == "__main__":
@@ -93,4 +105,4 @@ if __name__ == "__main__":
     image_blur_gray, image_res, image_thresh = preprocess_image(image)
     edge_and_coin_detection(image_blur_gray)
     markers = region_based_segmentation(image_thresh)
-    count_coins(markers)
+    segment_individual_coins_and_count(markers, image)

@@ -3,34 +3,39 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 def save_image(title, img):
-    if len(img.shape) == 3:  # Color image
+    if len(img.shape) == 3:
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     plt.figure(figsize=(10, 5))
     plt.imshow(img)
     plt.title(title)
-    plt.axis('off')  # Hide axes
+    plt.axis('off')
     plt.savefig(f'images/{title}.jpg')
 
 def find_keypoints_and_matches(img1, img2, title):
-    # Find SIFT keypoints and matches between two images
     sift = cv2.SIFT_create()
     
-    # Detect keypoints and descriptors
     kp1, des1 = sift.detectAndCompute(img1, None)
     kp2, des2 = sift.detectAndCompute(img2, None)
+
+    # Use FLANN matcher for better accuracy
+    FLANN_INDEX_KDTREE = 1
+    index_params = dict(algorithm=FLANN_INDEX_KDTREE, trees=5)
+    search_params = dict(checks=50)
+    flann = cv2.FlannBasedMatcher(index_params, search_params)
     
-    # Match descriptors using BFMatcher
-    bf = cv2.BFMatcher(cv2.NORM_L2, crossCheck=True)
-    matches = bf.match(des1, des2)
-    
-    # Sort matches by distance (best matches first)
-    matches = sorted(matches, key=lambda x: x.distance)
-    
+    matches = flann.knnMatch(des1, des2, k=2)
+
+    # Apply Lowe's Ratio Test for better match filtering
+    good_matches = []
+    for m, n in matches:
+        if m.distance < 0.75 * n.distance:
+            good_matches.append(m)
+
     # Draw matches
-    match_img = cv2.drawMatches(img1, kp1, img2, kp2, matches[:50], None, flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS)
+    match_img = cv2.drawMatches(img1, kp1, img2, kp2, good_matches[:50], None, flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS)
     save_image(f'keypoint-matches-{title}-and-reference', match_img)
 
-    return kp1, kp2, matches
+    return kp1, kp2, good_matches
 
 def compute_homography(kp1, kp2, matches):
     # Compute the homography matrix using RANSAC
@@ -59,7 +64,7 @@ def warp_images(img1, img2, H):
     H_translated = translation_matrix @ H  # Adjust the homography
     
     # Warp img1 into the new panorama space
-    warped_img1 = cv2.warpPerspective(img1, H_translated, (x_max - x_min, y_max - y_min))
+    warped_img1 = cv2.warpPerspective(img1, H_translated, (x_max - x_min, y_max - y_min), cv2.INTER_CUBIC)
     
     # Also shift img2 to fit into the panorama
     translated_img2 = np.zeros((y_max - y_min, x_max - x_min, 3), dtype=np.uint8)
@@ -104,9 +109,15 @@ def create_panorama(image_files):
     for i, img in enumerate([images[0]] + images[2:]):
         panorama = stitch_images(img, panorama, title=str(i+1) if i == 0 else str(i+2))
 
+    scale_factor = 0.7
+    height, width = panorama.shape[:2]
+    new_dimensions = (int(width * scale_factor), int(height * scale_factor))
+    panorama = cv2.resize(panorama, new_dimensions, interpolation=cv2.INTER_AREA)
+
+
     save_image("final-panorama", panorama)
 
 if __name__ == "__main__":
-    image_files = ["2-1.jpeg", "2-2.jpeg", "2-3.jpeg", "2-4.jpeg"]
+    image_files = ["1.jpeg", "2.jpeg", "3.jpeg", "4.jpeg"]
     print('Using image 2 as the reference frame')
     create_panorama(image_files)
