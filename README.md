@@ -116,6 +116,9 @@ The following images were stitched to create a panorama:
 
 </p>
 
+images: `images/1.jpeg` to `images/4.jpeg`
+
+<br>
 The code can be found at `panorama.py`. On running the python script, it reads 4 overlapping input images from `images/1.jpg` to `images/4.jpg` and writes the following files as an output to the `images` directory:
 
 - `images/keypoint-matches-1-and-reference.jpg` - matching keypoints between image 1 and reference image (image 2 is the initial reference image)
